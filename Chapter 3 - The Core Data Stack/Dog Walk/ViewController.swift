@@ -34,7 +34,7 @@ class ViewController: UIViewController {
   }()
   
   var managedContext: NSManagedObjectContext!
-  var walks: [NSDate] = []
+  var currentDog: Dog?
 
   // MARK: - IBOutlets
   @IBOutlet var tableView: UITableView!
@@ -44,6 +44,25 @@ class ViewController: UIViewController {
     super.viewDidLoad()
 
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "Cell")
+    
+    let dogName = "Fido"
+    let dogFetch: NSFetchRequest<Dog> = Dog.fetchRequest()
+    dogFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(Dog.name), dogName)
+    
+    do {
+      let result = try managedContext.fetch(dogFetch)
+      if result.count > 0 {
+        //Fido found, use Fido
+        currentDog = result.first
+      } else {
+        //Fido not found, create Fido
+        currentDog = Dog(context: managedContext)
+        currentDog?.name = dogName
+        try managedContext.save()
+      }
+    } catch let error as NSError {
+      print("Fetch error: \(error) description: \(error.userInfo)")
+    }
   }
 }
 
@@ -51,8 +70,35 @@ class ViewController: UIViewController {
 extension ViewController {
 
   @IBAction func add(_ sender: UIBarButtonItem) {
-    walks.insert(NSDate(), at: walks.index(before: 1))
+    //walks.insert(NSDate(), at: walks.index(before: 1))
     //walks.append(NSDate())
+    
+    // Insert a new Walk entity into CoreData
+    let walk = Walk(context: managedContext)
+    walk.date = NSDate()
+    
+    // Insert the new Walk into the Dog's walks set
+//    if let dog = currentDog {
+    //NSOrderedSet jest unmutable dlatego robi sie mutablecoppy zeby bylo mozna zmienic jego wartość
+//      if let walks = dog.walks?.mutableCopy() as? NSMutableOrderedSet {
+//        walks.add(walk)
+//        dog.walks = walks
+//      }
+//    }
+      //powyższe można zastąpić tym
+//    currentDog?.addToWalks(walk)
+    //aby układały się w kolejności wrzucam każdy nowy walk na index 0
+    currentDog?.insertIntoWalks(walk, at: 0)
+    
+    // Save the managed object context
+    
+    do {
+     try managedContext.save()
+    } catch let error as NSError {
+      print("Save error: \(error), description: \(error.userInfo)")
+    }
+    
+    // Reload tableview
     tableView.reloadData()
   }
 }
@@ -61,13 +107,20 @@ extension ViewController {
 extension ViewController: UITableViewDataSource {
 
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    guard let walks = currentDog?.walks else {
+      return 1
+    }
     return walks.count
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-    let date = walks[indexPath.row]
     let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
-    cell.textLabel?.text = dateFormatter.string(from: date as Date)
+    
+    guard let walk = currentDog?.walks?[indexPath.row] as? Walk,
+      let walkDate = walk.date as Date? else {
+        return cell
+    }
+    cell.textLabel?.text = dateFormatter.string(from: walkDate)
     return cell
   }
 
